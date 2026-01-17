@@ -1,4 +1,3 @@
-from collections import deque
 class Lobby:
     def __init__(self, id, players=4):
         self.id= id
@@ -8,6 +7,9 @@ class Lobby:
         self.ready=set()
         self.contour= None
         self.scores={}
+        self.phase= "LOBBY"
+    def isFull(self):
+        return len(self.connections) >= self.players
 class Lobbies:
     def __init__(self):
         self.lobbies= {}
@@ -17,4 +19,4 @@ class Lobbies:
         return self.lobbies[id]
     def get(self,id):
         return self.lobbies.get(id)
-manager=Lobbies()
+lobbies=Lobbies()

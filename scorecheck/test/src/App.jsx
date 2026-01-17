@@ -10,52 +10,85 @@ export default function WebSocketTester() {
   const lobbyWS = useRef(null);
   const battleWS = useRef(null);
 
-  const addLobbyLog = (msg) =>
-    setLobbyLog((prev) => [...prev, `[LOBBY] ${msg}`]);
+  const timestamp = () =>
+    new Date().toLocaleTimeString("en-US", { hour12: false });
 
-  const addBattleLog = (msg) =>
-    setBattleLog((prev) => [...prev, `[BATTLE] ${msg}`]);
+  const logLobby = (msg) =>
+    setLobbyLog((prev) => [...prev, `${timestamp()}  ${msg}`]);
+
+  const logBattle = (msg) =>
+    setBattleLog((prev) => [...prev, `${timestamp()}  ${msg}`]);
 
   // -----------------------------
   // LOBBY CONNECTION
   // -----------------------------
   const connectLobby = () => {
-    lobbyWS.current = new WebSocket(`ws://localhost:8000/ws/${lid}/${idname}`);
+    if (lobbyWS.current) lobbyWS.current.close();
 
-    lobbyWS.current.onopen = () => addLobbyLog("Connected");
-    lobbyWS.current.onclose = () => addLobbyLog("Closed");
-    lobbyWS.current.onerror = (e) => addLobbyLog("Error: " + e.message);
+    const ws = new WebSocket(`ws://localhost:8000/ws/${lid}/${idname}`);
+    lobbyWS.current = ws;
 
-    lobbyWS.current.onmessage = (event) => {
-      addLobbyLog("Recv: " + event.data);
+    ws.onopen = () => logLobby("[OPEN]");
+    ws.onclose = () => logLobby("[CLOSE]");
+    ws.onerror = (e) => logLobby("[ERROR] " + e.message);
+
+    ws.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data);
+        logLobby("[RECV] " + JSON.stringify(parsed, null, 2));
+      } catch {
+        logLobby("[RECV RAW] " + event.data);
+      }
     };
   };
 
   const sendLobby = (obj) => {
-    if (!lobbyWS.current) return;
+    if (!lobbyWS.current || lobbyWS.current.readyState !== 1) {
+      logLobby("[SEND FAILED] socket not open");
+      return;
+    }
     lobbyWS.current.send(JSON.stringify(obj));
-    addLobbyLog("Sent: " + JSON.stringify(obj));
+    logLobby("[SEND] " + JSON.stringify(obj));
+  };
+
+  const closeLobby = () => {
+    if (lobbyWS.current) lobbyWS.current.close();
   };
 
   // -----------------------------
   // BATTLE CONNECTION
   // -----------------------------
   const connectBattle = () => {
-    battleWS.current = new WebSocket(`ws://localhost:8000/battle/${lid}/${idname}`);
+    if (battleWS.current) battleWS.current.close();
 
-    battleWS.current.onopen = () => addBattleLog("Connected");
-    battleWS.current.onclose = () => addBattleLog("Closed");
-    battleWS.current.onerror = (e) => addBattleLog("Error: " + e.message);
+    const ws = new WebSocket(`ws://localhost:8000/battle/${lid}/${idname}`);
+    battleWS.current = ws;
 
-    battleWS.current.onmessage = (event) => {
-      addBattleLog("Recv: " + event.data);
+    ws.onopen = () => logBattle("[OPEN]");
+    ws.onclose = () => logBattle("[CLOSE]");
+    ws.onerror = (e) => logBattle("[ERROR] " + e.message);
+
+    ws.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data);
+        logBattle("[RECV] " + JSON.stringify(parsed, null, 2));
+      } catch {
+        logBattle("[RECV RAW] " + event.data);
+      }
     };
   };
 
   const sendBattle = (obj) => {
-    if (!battleWS.current) return;
+    if (!battleWS.current || battleWS.current.readyState !== 1) {
+      logBattle("[SEND FAILED] socket not open");
+      return;
+    }
     battleWS.current.send(JSON.stringify(obj));
-    addBattleLog("Sent: " + JSON.stringify(obj));
+    logBattle("[SEND] " + JSON.stringify(obj));
+  };
+
+  const closeBattle = () => {
+    if (battleWS.current) battleWS.current.close();
   };
 
   // -----------------------------
@@ -76,61 +109,41 @@ export default function WebSocketTester() {
       {/* LOBBY SECTION */}
       <h3>Lobby WebSocket</h3>
       <button onClick={connectLobby}>Connect Lobby</button>
+      <button onClick={closeLobby} style={{ marginLeft: 10 }}>
+        Close Lobby
+      </button>
+      <button onClick={() => setLobbyLog([])} style={{ marginLeft: 10 }}>
+        Clear Log
+      </button>
 
       <div style={{ marginTop: 10 }}>
-        <button onClick={() => sendLobby({ type: "JOIN_LOBBY" })}>
-          JOIN_LOBBY
-        </button>
-
-        <button onClick={() => sendLobby({ type: "LEAVE_LOBBY" })}>
-          LEAVE_LOBBY
-        </button>
-
-        <button
-          onClick={() =>
-            sendLobby({ type: "SET_READY", payload: { ready: true } })
-          }
-        >
+        <button onClick={() => sendLobby({ type: "JOIN_LOBBY" })}>JOIN_LOBBY</button>
+        <button onClick={() => sendLobby({ type: "LEAVE_LOBBY" })}>LEAVE_LOBBY</button>
+        <button onClick={() => sendLobby({ type: "SET_READY", payload: { ready: true } })}>
           SET_READY (true)
         </button>
-
-        <button
-          onClick={() =>
-            sendLobby({ type: "SET_READY", payload: { ready: false } })
-          }
-        >
+        <button onClick={() => sendLobby({ type: "SET_READY", payload: { ready: false } })}>
           SET_READY (false)
         </button>
-
-        <button
-          onClick={() =>
-            sendLobby({ type: "SELECT_SONG", payload: { songID: "song_42" } })
-          }
-        >
+        <button onClick={() => sendLobby({ type: "SELECT_SONG", payload: { songID: "song_42" } })}>
           SELECT_SONG
         </button>
-
-        <button onClick={() => sendLobby({ type: "START_BATTLE" })}>
-          START_BATTLE
-        </button>
+        <button onClick={() => sendLobby({ type: "START_BATTLE" })}>START_BATTLE</button>
       </div>
 
-      <pre
-        style={{
-          background: "#111",
-          color: "#0f0",
-          padding: 10,
-          height: 200,
-          overflowY: "scroll",
-          marginTop: 10,
-        }}
-      >
+      <pre style={{ background: "#111", color: "#0f0", padding: 10, height: 200, overflowY: "scroll", marginTop: 10 }}>
         {lobbyLog.join("\n")}
       </pre>
 
       {/* BATTLE SECTION */}
       <h3>Battle WebSocket</h3>
       <button onClick={connectBattle}>Connect Battle</button>
+      <button onClick={closeBattle} style={{ marginLeft: 10 }}>
+        Close Battle
+      </button>
+      <button onClick={() => setBattleLog([])} style={{ marginLeft: 10 }}>
+        Clear Log
+      </button>
 
       <div style={{ marginTop: 10 }}>
         <button
@@ -150,16 +163,7 @@ export default function WebSocketTester() {
         </button>
       </div>
 
-      <pre
-        style={{
-          background: "#111",
-          color: "#0ff",
-          padding: 10,
-          height: 200,
-          overflowY: "scroll",
-          marginTop: 10,
-        }}
-      >
+      <pre style={{ background: "#111", color: "#0ff", padding: 10, height: 200, overflowY: "scroll", marginTop: 10 }}>
         {battleLog.join("\n")}
       </pre>
     </div>

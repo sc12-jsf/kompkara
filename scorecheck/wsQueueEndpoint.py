@@ -1,10 +1,23 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
-from lobby import Lobbies
-from process import driver
+from lobby import lobbies
+from fastapi import APIRouter 
 import json
 import time
-app= FastAPI()
+import os
+router = APIRouter()
+
+def load_contour(song_id):
+    path = f"contours/{song_id}.json"
+
+    if not os.path.exists(path):
+        print(f"[WARN] No contour for {song_id}, using fallback")
+        return [{"time": t/1000, "pitch": 0} for t in range(200000)]
+
+    with open(path, "r") as f:
+        return json.load(f)
+
+
 def lobbyPayload(lobby):
     return[{"id":pid,"name":pid,"ready":pid in lobby.ready, "score": lobby.scores.get(pid,0)}
            for pid in lobby.connections.keys()]
@@ -28,13 +41,13 @@ async def playerReady(lobby,pid,ready):
     for ws in lobby.connections.values():
         await ws.send_text(dta)
 async def phaseChange(lobby, phase):
+    lobby.phase= phase
     msg={"type": "PHASE_CHANGE","payload":{"phase": phase,"startTime": int(time.time())*1000}}
     dta= json.dumps(msg)
     for ws in lobby.connections.values():
         await ws.send_text(dta)
 
-lobbies= Lobbies()
-@app.websocket("/ws/{lid}/{idname}")
+@router.websocket("/ws/{lid}/{idname}")
 async def endpoint(websocket: WebSocket,lid: str,idname: str):
     await websocket.accept()
     #debug line to makesure connection was accepted
@@ -42,9 +55,6 @@ async def endpoint(websocket: WebSocket,lid: str,idname: str):
 
     lobby= lobbies.makelobby(lid)
   
-    if not lobby.started:
-        asyncio.create_task(driver(lobby))
-        lobby.started= True
     lobby.connections[idname]= websocket
     try:
         while True:
@@ -56,7 +66,6 @@ async def endpoint(websocket: WebSocket,lid: str,idname: str):
                 await lobby_snapshot(lobby)
             elif types =="LEAVE_LOBBY":
                 lobby.ready.discard(idname)
-                lobby.playerlist.remove(idname)
                 del lobby.connections[idname]
                 await lobby_snapshot(lobby)
             elif types =="SET_READY": 
@@ -67,9 +76,11 @@ async def endpoint(websocket: WebSocket,lid: str,idname: str):
                     lobby.ready.discard(idname)
                 await playerReady(lobby,idname,ready)
                 if len(lobby.ready) == lobby.players:
-                    await phaseChange(lobby,phase="IN_BATTLE")
+                    await phaseChange(lobby,"IN_BATTLE")
             elif types== "SELECT_SONG":
-                lobby.song_id=payload.get("songID")
+                song_id=payload.get("songID")
+                lobby.song_id= song_id
+                lobby.contour= load_contour(song_id)
                 await lobby_snapshot(lobby)
 
            
